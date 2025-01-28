@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import NavBar from "../../components/NavBar.jsx";
-import { Toaster } from "@/components/ui/toaster"
+import NavBar from "../../components/NavBar";
+import { Toaster } from "../../components/ui/toaster"
 import "./globals.css";
-import { Toaster } from "@/components/ui/toaster"
 
 export const metadata: Metadata = {
   title: "Convertio | convert any files unlimited ",
