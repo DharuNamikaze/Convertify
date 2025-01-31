@@ -5,8 +5,10 @@ import { useToast } from "../hooks/use-toast";
 import { Toaster } from "../components/ui/toaster";
 import { FiUploadCloud } from "react-icons/fi";
 import { MdDelete } from "react-icons/md";
-import { LiaImageSolid } from "react-icons/lia";
 import { FcAddImage } from "react-icons/fc";
+import { FcDocument } from "react-icons/fc";
+import { FcAudioFile } from "react-icons/fc";
+import { FcVideoFile } from "react-icons/fc";
 import {
   Select,
   SelectContent,
@@ -31,16 +33,19 @@ const Dropzone = () => {
   const { getRootProps, getInputProps } = useDropzone({
     accept: {
       "image/*": [".jpeg", ".png", ".jpg", ".gif", ".pdf", ".tiff", ".psd", ".raw", ".eps", ".webp", ".svg", ".ico", ".bmp"],
-      "audio/*": [".mp3", ".wav", ".ogg", ".flac", ".aiff", ".m4a",".wma",".aac"],
-      "video/*": [".mp4", ".avi", ".mov", ".wmv", ".mkv", ".flv", ".webm"],
+      "audio/*": [".mp3", ".wav", ".ogg", ".flac", ".aiff", ".m4a",".wma",".aac" ],
+      "video/*": [".mp4", ".avi", ".mov", ".wmv", ".mkv", ".flv", ".webm",".mpeg"],
     },
     onDrop: (acceptedFiles) => {
-      setFiles(acceptedFiles.map(file => ({
+      setFiles(prevFiles => [
+        ...prevFiles,
+        ...acceptedFiles.map(file => ({
         name: file.name,
         size: file.size,
         type: file.type,
         targetFormat: ""
-      })));
+      }))
+    ]);
     },
     onDropRejected: (fileRejections) => {
       fileRejections.forEach(({ file, errors }) => {
@@ -65,6 +70,10 @@ const Dropzone = () => {
     const newFiles = files.filter((_, i) => i !== index);
     setFiles(newFiles);
   };
+
+  const handleDeleteAll = () => {
+    setFiles([]);
+  };
   
   const formatFileSize = (size: number) => {
     if (size >= 1024 * 1024) {
@@ -84,47 +93,54 @@ const Dropzone = () => {
       {files.length > 0 && (
               <div className="mt-5 lg:mx-52 max-sm:m-10 sm:mx-10 items-center justify-center py-10 uploaded-files">
               {files.map((file, index) => (
-                <div key={index} className="max-sm:pb-4 border flex gap-20 items-center justify-center max-sm:flex max-sm:flex-col max-sm:gap-5 max-sm:justify-evenly ">
-                  <div className="p-5">
-                    <span className="items-center justify-center flex gap-1">{file.type.startsWith("image/") && (<FcAddImage />)} {file.name}</span>
+                <div key={index} className="pb-4 border flex items-center max-sm:flex max-sm:flex-col max-sm:gap-5">
+                  <div className="p-5 flex-1">
+                  <span className="flex items-center gap-1">
+                    {file.type.startsWith("image/") && (<FcAddImage />)} 
+                    {file.type.startsWith("application/") && (<FcDocument />)} 
+                    {file.type.startsWith("audio/") && (<FcAudioFile />)}
+                    {file.type.startsWith("video/") && (<FcVideoFile />)}
+                    {file.name} {console.log(file.type)}
                     <small className="text-gray-700">({formatFileSize(file.size)})</small>
-                    
-                    {/* Add more options as needed */}
+                  </span>
                   </div>
+                  <div className="flex items-center gap-5 p-2">
                   <Select>
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Select Format" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectLabel>Select Format</SelectLabel>
-                          <SelectItem value="jpeg" onSelect={() => handleFormatChange(index, "jpeg")}>JPEG</SelectItem>
-                          <SelectItem value="png" onSelect={() => handleFormatChange(index, "png")}>PNG</SelectItem>
-                          <SelectItem value="jpg" onSelect={() => handleFormatChange(index, "jpg")}>JPG</SelectItem>
-                          <SelectItem value="svg" onSelect={() => handleFormatChange(index, "svg")}>SVG</SelectItem>
-                          <SelectItem value="pdf" onSelect={() => handleFormatChange(index, "pdf")}>PDF</SelectItem>
-                          <SelectItem value="ico" onSelect={() => handleFormatChange(index, "ico")}>ICO</SelectItem>
-                          <SelectItem value="gif" onSelect={() => handleFormatChange(index, "gif")}>GIF</SelectItem>
-                          <SelectItem value="tiff" onSelect={() => handleFormatChange(index, "tiff")}>TIFF</SelectItem>
-                          <SelectItem value="psd" onSelect={() => handleFormatChange(index, "psd")}>PSD</SelectItem>
-                          <SelectItem value="raw" onSelect={() => handleFormatChange(index, "raw")}>RAW</SelectItem>
-                          <SelectItem value="eps" onSelect={() => handleFormatChange(index, "eps")}>EPS</SelectItem>
-                          <SelectItem value="webp" onSelect={() => handleFormatChange(index, "webp")}>WEBP</SelectItem>
-                          <SelectItem value="bmp" onSelect={() => handleFormatChange(index, "bmp")}>BMP</SelectItem>
-                          </SelectGroup>
-                      </SelectContent>
-                    </Select>
-      
+                    <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select Format" />
+                    </SelectTrigger>
+                    <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Select Format</SelectLabel>
+                      <SelectItem value="jpeg" onSelect={() => handleFormatChange(index, "jpeg")}>JPEG</SelectItem>
+                      <SelectItem value="png" onSelect={() => handleFormatChange(index, "png")}>PNG</SelectItem>
+                      <SelectItem value="jpg" onSelect={() => handleFormatChange(index, "jpg")}>JPG</SelectItem>
+                      <SelectItem value="svg" onSelect={() => handleFormatChange(index, "svg")}>SVG</SelectItem>
+                      <SelectItem value="pdf" onSelect={() => handleFormatChange(index, "pdf")}>PDF</SelectItem>
+                      <SelectItem value="ico" onSelect={() => handleFormatChange(index, "ico")}>ICO</SelectItem>
+                      <SelectItem value="gif" onSelect={() => handleFormatChange(index, "gif")}>GIF</SelectItem>
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectItem value="tiff" onSelect={() => handleFormatChange(index, "tiff")}>TIFF</SelectItem>
+                      <SelectItem value="psd" onSelect={() => handleFormatChange(index, "psd")}>PSD</SelectItem>
+                      <SelectItem value="raw" onSelect={() => handleFormatChange(index, "raw")}>RAW</SelectItem>
+                      <SelectItem value="eps" onSelect={() => handleFormatChange(index, "eps")}>EPS</SelectItem>
+                      <SelectItem value="webp" onSelect={() => handleFormatChange(index, "webp")}>WEBP</SelectItem>
+                      <SelectItem value="bmp" onSelect={() => handleFormatChange(index, "bmp")}>BMP</SelectItem>
+                    </SelectGroup>
+                    </SelectContent>
+                  </Select>
                   <Button
                     variant="outline"
                     onClick={() => handleDelete(index)}
-                    className=" px-2.5 rounded-full bg-violet-900 hover:text-white text-white hover:bg-violet-700 "
+                    className="px-2.5 rounded-full bg-violet-900 hover:text-white text-white hover:bg-violet-700"
                   >
                     <MdDelete />
                   </Button>
+                  </div>
                 </div>
               ))}
-              <Button className="m-10">Convert Now</Button>
+              <Button variant='default' className="m-10">Convert Now</Button> {files.length > 1 && <Button variant='destructive' className="" onClick={()=>handleDeleteAll()}>Delete All</Button>}
               </div>
       )}
       <Toaster />
