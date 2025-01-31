@@ -31,7 +31,7 @@ const Dropzone = () => {
   const { getRootProps, getInputProps } = useDropzone({
     accept: {
       "image/*": [".jpeg", ".png", ".jpg", ".gif", ".pdf", ".tiff", ".psd", ".raw", ".eps", ".webp", ".svg", ".ico", ".bmp"],
-      "audio/*": [".mp3", ".wav", ".ogg", ".flac", ".aiff", ".m4a","wma","aac"],
+      "audio/*": [".mp3", ".wav", ".ogg", ".flac", ".aiff", ".m4a",".wma",".aac"],
       "video/*": [".mp4", ".avi", ".mov", ".wmv", ".mkv", ".flv", ".webm"],
     },
     onDrop: (acceptedFiles) => {
@@ -76,15 +76,15 @@ const Dropzone = () => {
 
   return (
     <div className="mt-5">
-      <div {...getRootProps({ className: "mx-52 py-28 border dropzone flex flex-col items-center justify-center" })}>
+      <div {...getRootProps({ className: "lg:mx-52 mx-10 py-28 border dropzone flex flex-col items-center justify-center" })}>
         <FiUploadCloud className="w-10 h-10 mb-2" />
         <input {...getInputProps()} />
         <p>Drag & drop your files here, or click to <span className="text-violet-800 cursor-pointer">select</span> files</p>
       </div>
       {files.length > 0 && (
-              <div className="mt-5 lg:mx-52 sm:mx-10 border  py-10 uploaded-files">
+              <div className="mt-5 lg:mx-52 max-sm:m-10 sm:mx-10 items-center justify-center py-10 uploaded-files">
               {files.map((file, index) => (
-                <div key={index} className="border flex gap-20 items-center justify-center max-sm:flex max-sm:flex-col max-sm:gap-5 max-sm:justify-evenly">
+                <div key={index} className="max-sm:pb-4 border flex gap-20 items-center justify-center max-sm:flex max-sm:flex-col max-sm:gap-5 max-sm:justify-evenly ">
                   <div className="p-5">
                     <span className="items-center justify-center flex gap-1">{file.type.startsWith("image/") && (<FcAddImage />)} {file.name}</span>
                     <small className="text-gray-700">({formatFileSize(file.size)})</small>
@@ -118,7 +118,7 @@ const Dropzone = () => {
                   <Button
                     variant="outline"
                     onClick={() => handleDelete(index)}
-                    className=" px-2.5 rounded-full bg-violet-900 hover:text-white text-white hover:bg-violet-700 mb-4"
+                    className=" px-2.5 rounded-full bg-violet-900 hover:text-white text-white hover:bg-violet-700 "
                   >
                     <MdDelete />
                   </Button>
