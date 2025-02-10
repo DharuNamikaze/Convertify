@@ -1,8 +1,5 @@
 'use client'
-import Image from "next/image";
-import { TfiReload } from "react-icons/tfi";
 import Dropzone from "../../components/Dropzone";
-import { Toast } from "@radix-ui/react-toast";
 
 export default function Home() {
   return (
@@ -13,7 +10,7 @@ export default function Home() {
         The Ultimate online tool -- helps you to convert any file
         format with unlimited conversions, start using convertify
         now you can convert files effortlessly without restrictions,
-        it's Free!
+        it&apos;s Free!
       </h3>
 
       {/* Upload section */}

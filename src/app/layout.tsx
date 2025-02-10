@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import NavBar from "../../components/NavBar";
-import { Toaster } from "../../components/ui/toaster"
+import { Toaster } from "../../components/ui/toaster";
 import "./globals.css";
+import { motion } from "framer-motion";
+import React from "react";
 
 export const metadata: Metadata = {
-  title: "Convertio | convert any files unlimited ",
+  title: "Convertio | convert any files unlimited",
   description: "Convert any file into any filetype, unlimited file conversion",
-  creator:"github.com/DharuNamikaze",
-  keywords:"convertor, file converter, unlimited file converter, audio video converter, "
+  creator: "github.com/DharuNamikaze",
+  keywords: "convertor, file converter, unlimited file converter, audio video converter",
 };
 
 export default function RootLayout({
@@ -18,7 +20,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <NavBar/>
+        <NavBar />
         <Toaster />
         {children}
       </body>
