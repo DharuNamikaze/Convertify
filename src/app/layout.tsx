@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import NavBar from "../../components/NavBar";
 import { Toaster } from "../../components/ui/toaster";
 import "./globals.css";
-import { motion } from "framer-motion";
 import React from "react";
 
 export const metadata: Metadata = {
