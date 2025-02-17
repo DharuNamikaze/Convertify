@@ -1,21 +1,25 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  webpack: (config) => {
-    config.module.rules.push({
-      test: /@ffmpeg\/ffmpeg/,
-      use: {
-        loader: "babel-loader",
-        options: {
-          presets: ["@babel/preset-env"],
-        },
-      },
-    });
+import type { NextConfig } from "next";
 
-    return config;
+const nextConfig: NextConfig = {
+  async headers() {
+    return [
+      {
+        // Apply these headers to all routes
+        source: "/(.*)",
+        headers: [
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "same-origin",
+          },
+          {
+            key: "Cross-Origin-Embedder-Policy",
+            value: "require-corp",
+          },
+        ],
+      },
+    ];
   },
-  experimental: {
-    esmExternals: false, // Ensure compatibility with CommonJS
-  },
+  // ...any other config options
 };
 
-module.exports = nextConfig;
+export default nextConfig;

@@ -1,18 +1,13 @@
-'use client'
+"use client";
+
 import { useDropzone } from "react-dropzone";
-import { useState, useCallback , useEffect} from "react";
+import { useState, useEffect } from "react";
 import { Button } from "../components/ui/button";
 import { useToast } from "../hooks/use-toast";
 import { Toaster } from "../components/ui/toaster";
 import { FiUploadCloud } from "react-icons/fi";
 import { MdDelete } from "react-icons/md";
 import { FcAddImage, FcDocument, FcAudioFile, FcVideoFile } from "react-icons/fc";
-import React from "react";
-import { createFFmpeg } from "@ffmpeg/ffmpeg";
-// Import fetchFile separately
-import {fetchFile} from "@ffmpeg/util";
-import * as ffmpegModule from "@ffmpeg/ffmpeg";
-console.log(ffmpegModule);
 import {
   Select,
   SelectContent,
@@ -22,39 +17,29 @@ import {
   SelectValue,
 } from "../components/ui/select";
 
+import { createFFmpeg } from "@ffmpeg/ffmpeg";
+
+const ffmpeg = createFFmpeg({ log: true });
+
 type FileType = {
+  file: File;
   name: string;
   size: number;
   type: string;
   targetFormat: string;
-  file: File;
 };
-  
 
 const Dropzone = () => {
   const { toast } = useToast();
-  const [isFFmpegLoaded, setIsFFmpegLoaded] = useState(false);
   const [files, setFiles] = useState<FileType[]>([]);
-  const [convertedUrl, setConvertedUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  
-  if (!isFFmpegLoaded) {
-    return <p>Loading FFmpeg...</p>;
-  }
+  const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
 
-  const ffmpeg = createFFmpeg({ log: true });
-
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    setFiles(prevFiles => [
-      ...prevFiles,
-      ...acceptedFiles.map(file => ({
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        targetFormat: "",
-        file: file, // Store the actual file object
-      }))
-    ]);
+  useEffect(() => {
+    const loadFFmpeg = async () => {
+      await ffmpeg.load();
+      setFfmpegLoaded(true);
+    };
+    loadFFmpeg();
   }, []);
 
   const { getRootProps, getInputProps } = useDropzone({
@@ -63,87 +48,116 @@ const Dropzone = () => {
       "audio/*": [".mp3", ".wav", ".ogg", ".flac", ".aiff", ".m4a", ".wma", ".aac"],
       "video/*": [".mp4", ".avi", ".mov", ".wmv", ".mkv", ".flv", ".webm", ".mpeg"],
     },
-    onDrop,
+    onDrop: (acceptedFiles) => {
+      setFiles((prevFiles) => [
+        ...prevFiles,
+        ...acceptedFiles.map((file) => ({
+          file,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          targetFormat: "",
+        })),
+      ]);
+    },
+    onDropRejected: (fileRejections) => {
+      fileRejections.forEach(({ file, errors }) => {
+        errors.forEach(() => {
+          toast({
+            title: "Invalid File Format",
+            description: `The file "${file.name}" is not accepted.`,
+            variant: "destructive",
+          });
+        });
+      });
+    },
   });
 
-  const handleFormatChange = useCallback((index: number, format: string) => {
-    setFiles(prevFiles => {
+  const handleFormatChange = (index: number, format: string) => {
+    setFiles((prevFiles) => {
       const newFiles = [...prevFiles];
       newFiles[index].targetFormat = format;
       return newFiles;
     });
-  }, []);
+  };
 
-  const handleDelete = useCallback((index: number) => {
-    setFiles(prevFiles => prevFiles.filter((_, i) => i !== index));
-  }, []);
+  const handleDelete = (index: number) => {
+    setFiles((prevFiles) => prevFiles.filter((_, i) => i !== index));
+  };
 
-  const handleDeleteAll = useCallback(() => {
+  const handleDeleteAll = () => {
     setFiles([]);
-  }, []);
+  };
 
-  const formatFileSize = useCallback((size: number) => {
+  const formatFileSize = (size: number) => {
     return size >= 1024 * 1024
       ? `${(size / (1024 * 1024)).toFixed(2)} MB`
       : `${(size / 1024).toFixed(2)} KB`;
-  }, []);
-
-  const loadFFmpeg = async () => {
-    if (!ffmpeg.isLoaded()) {
-      await ffmpeg.load();
-    }
   };
 
-  const convertFile = async (file: FileType) => {
-    if (!file || !file.file) return;
-    setLoading(true);
-    await loadFFmpeg();
-
-    const input = file.name;
-    const output = `${file.name.split('.').slice(0, -1).join('.')}.${file.targetFormat}`;
-
-    try {
-      ffmpeg.FS("writeFile", input, await fetchFile(file.file));
-      await ffmpeg.run("-i", input, output);
-      const data = ffmpeg.FS("readFile", output);
-
-      // Create a downloadable URL
-      const convertedBlob = new Blob([data.buffer], { type: file.type });
-      const url = URL.createObjectURL(convertedBlob);
-      setConvertedUrl(url);
-
+  const handleConvertNow = async () => {
+    if (!ffmpegLoaded) {
       toast({
-        title: "Conversion Successful",
-        description: `File "${file.name}" converted successfully!`,
-        variant: "success",
-      });
-    } catch (error) {
-      toast({
-        title: "Conversion Error",
-        description: `Failed to convert "${file.name}".`,
+        title: "FFmpeg not loaded",
+        description: "Please wait for FFmpeg to load.",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
+      return;
     }
-  };
-  
-  useEffect(() => {
-    loadFFmpeg().then(() => setIsFFmpegLoaded(true));
-  }, []);
 
-
-  const handleConvert = () => {
-    files.forEach(file => {
-      if (file.targetFormat) {
-        convertFile(file);
-      } else {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!file.targetFormat) {
         toast({
-          title: "Format Not Selected",
-          description: `Please select a target format for "${file.name}".`,
+          title: "Target Format Missing",
+          description: `Please select a target format for ${file.name}.`,
+          variant: "destructive",
+        });
+        continue;
+      }
+
+      try {
+        const inputName = file.name;
+        const outputName = `${inputName.substring(0, inputName.lastIndexOf("."))}.${file.targetFormat}`;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          if (event.target && event.target.result instanceof ArrayBuffer) {
+            const uint8Array = new Uint8Array(event.target.result);
+            await ffmpeg.FS("writeFile", inputName, uint8Array);
+            await ffmpeg.run("-i", inputName, outputName);
+            const data = await ffmpeg.FS("readFile", outputName);
+            const blob = new Blob([data.buffer], { type: file.file.type });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = outputName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+          }
+        };
+        reader.onerror = (error) => {
+          toast({
+            title: "File Read Error",
+            description: `Error reading ${file.name}: ${error}`,
+            variant: "destructive",
+          });
+        };
+        reader.readAsArrayBuffer(file.file);
+      } catch (e) {
+        toast({
+          title: "Conversion Error",
+          description: `Error converting ${file.name}: ${e}`,
           variant: "destructive",
         });
       }
+    }
+
+    toast({
+      title: "Conversion Completed",
+      description: "Files have been converted and downloaded.",
     });
   };
 
@@ -152,7 +166,10 @@ const Dropzone = () => {
       <div {...getRootProps({ className: "lg:mx-52 mx-10 py-28 border dropzone flex flex-col items-center justify-center" })}>
         <FiUploadCloud className="w-10 h-10 mb-2" />
         <input {...getInputProps()} />
-        <p>Drag & drop your files here, or click to <span className="text-violet-800 cursor-pointer">select</span> files</p>
+        <p>
+          Drag & drop your files here, or click to{" "}
+          <span className="text-violet-800 cursor-pointer">select</span> files
+        </p>
       </div>
 
       {files.length > 0 && (
@@ -169,18 +186,36 @@ const Dropzone = () => {
                   <small className="text-gray-700">({formatFileSize(file.size)})</small>
                 </span>
               </div>
-
               <div className="flex items-center gap-5 p-2">
-                <Select>
+                <Select onValueChange={(value) => handleFormatChange(index, value)}>
                   <SelectTrigger className="w-[250px]">
                     <SelectValue placeholder="Select Format" />
                   </SelectTrigger>
                   <SelectContent className="w-[300px]">
-                    <SelectGroup>
-                      <SelectItem value="jpeg" onClick={() => handleFormatChange(index, "jpeg")}>JPEG</SelectItem>
-                      <SelectItem value="png" onClick={() => handleFormatChange(index, "png")}>PNG</SelectItem>
-                      <SelectItem value="mp4" onClick={() => handleFormatChange(index, "mp4")}>MP4</SelectItem>
-                    </SelectGroup>
+                    <div className="grid grid-cols-2 gap-2 p-2">
+                      <div>
+                        <SelectGroup>
+                          <SelectItem value="jpeg">JPEG</SelectItem>
+                          <SelectItem value="png">PNG</SelectItem>
+                          <SelectItem value="jpg">JPG</SelectItem>
+                          <SelectItem value="svg">SVG</SelectItem>
+                          <SelectItem value="pdf">PDF</SelectItem>
+                          <SelectItem value="ico">ICO</SelectItem>
+                          <SelectItem value="gif">GIF</SelectItem>
+                        </SelectGroup>
+                      </div>
+                      <div>
+                        <SelectGroup>
+                          <SelectItem value="heif">HEIF</SelectItem>
+                          <SelectItem value="tiff">TIFF</SelectItem>
+                          <SelectItem value="psd">PSD</SelectItem>
+                          <SelectItem value="raw">RAW</SelectItem>
+                          <SelectItem value="eps">EPS</SelectItem>
+                          <SelectItem value="webp">WEBP</SelectItem>
+                          <SelectItem value="bmp">BMP</SelectItem>
+                        </SelectGroup>
+                      </div>
+                    </div>
                   </SelectContent>
                 </Select>
 
@@ -194,16 +229,17 @@ const Dropzone = () => {
               </div>
             </div>
           ))}
+          <Button variant="default" className="m-10" onClick={handleConvertNow}>
+            Convert Now
+          </Button>
 
-          <Button variant='default' className="m-10" onClick={handleConvert}>Convert Now</Button>
-          {files.length > 1 && <Button variant='destructive' onClick={handleDeleteAll}>Delete All</Button>}
+          {files.length > 1 && (
+            <Button variant="destructive" onClick={handleDeleteAll}>
+              Delete All
+            </Button>
+          )}
         </div>
       )}
-
-      {convertedUrl && (
-        <a href={convertedUrl} download className="block text-center text-violet-800 mt-4">Download Converted File</a>
-      )}
-
       <Toaster />
     </div>
   );

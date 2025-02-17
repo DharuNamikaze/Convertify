@@ -5,7 +5,7 @@ import "./globals.css";
 import React from "react";
 
 export const metadata: Metadata = {
-  title: "Convertio | convert any files unlimited",
+  title: "Convertify | convert any files unlimited",
   description: "Convert any file into any filetype, unlimited file conversion",
   creator: "github.com/DharuNamikaze",
   keywords: "convertor, file converter, unlimited file converter, audio video converter",
