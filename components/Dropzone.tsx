@@ -16,7 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
-
 import { createFFmpeg } from "@ffmpeg/ffmpeg";
 
 const ffmpeg = createFFmpeg({ log: true });
@@ -44,30 +43,25 @@ const Dropzone = () => {
 
   const { getRootProps, getInputProps } = useDropzone({
     accept: {
-      "image/*": [".jpeg", ".png", ".jpg", ".gif", ".pdf", ".tiff", ".psd", ".raw", ".eps", ".webp", ".svg", ".ico", ".bmp"],
-      "audio/*": [".mp3", ".wav", ".ogg", ".flac", ".aiff", ".m4a", ".wma", ".aac"],
-      "video/*": [".mp4", ".avi", ".mov", ".wmv", ".mkv", ".flv", ".webm", ".mpeg"],
+      "image/*": [".jpeg", ".png", ".jpg", ".gif", ".webp", ".svg"],
+      "audio/*": [".mp3", ".wav", ".ogg"],
+      "video/*": [".mp4", ".avi", ".mov"],
     },
     onDrop: (acceptedFiles) => {
-      setFiles((prevFiles) => [
-        ...prevFiles,
-        ...acceptedFiles.map((file) => ({
-          file,
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          targetFormat: "",
-        })),
-      ]);
+      setFiles((prevFiles) => [...prevFiles, ...acceptedFiles.map((file) => ({
+        file,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        targetFormat: "",
+      }))]);
     },
     onDropRejected: (fileRejections) => {
-      fileRejections.forEach(({ file, errors }) => {
-        errors.forEach(() => {
-          toast({
-            title: "Invalid File Format",
-            description: `The file "${file.name}" is not accepted.`,
-            variant: "destructive",
-          });
+      fileRejections.forEach(({ file }) => {
+        toast({
+          title: "Invalid File Format",
+          description: `The file "${file.name}" is not accepted.`,
+          variant: "destructive",
         });
       });
     },
@@ -81,53 +75,35 @@ const Dropzone = () => {
     });
   };
 
-  const handleDelete = (index: number) => {
-    setFiles((prevFiles) => prevFiles.filter((_, i) => i !== index));
-  };
+  const handleDelete = (index: number) => setFiles((prevFiles) => prevFiles.filter((_, i) => i !== index));
+  const handleDeleteAll = () => setFiles([]);
 
-  const handleDeleteAll = () => {
-    setFiles([]);
-  };
-
-  const formatFileSize = (size: number) => {
-    return size >= 1024 * 1024
-      ? `${(size / (1024 * 1024)).toFixed(2)} MB`
-      : `${(size / 1024).toFixed(2)} KB`;
-  };
+  const formatFileSize = (size: number) => (size >= 1024 * 1024 ? `${(size / (1024 * 1024)).toFixed(2)} MB` : `${(size / 1024).toFixed(2)} KB`);
 
   const handleConvertNow = async () => {
     if (!ffmpegLoaded) {
-      toast({
-        title: "FFmpeg not loaded",
-        description: "Please wait for FFmpeg to load.",
-        variant: "destructive",
-      });
+      toast({ title: "FFmpeg not loaded", description: "Please wait for FFmpeg to load.", variant: "destructive" });
       return;
     }
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    for (const file of files) {
       if (!file.targetFormat) {
-        toast({
-          title: "Target Format Missing",
-          description: `Please select a target format for ${file.name}.`,
-          variant: "destructive",
-        });
+        toast({ title: "Target Format Missing", description: `Select a target format for ${file.name}.`, variant: "destructive" });
         continue;
       }
 
       try {
         const inputName = file.name;
         const outputName = `${inputName.substring(0, inputName.lastIndexOf("."))}.${file.targetFormat}`;
-
+        
         const reader = new FileReader();
         reader.onload = async (event) => {
-          if (event.target && event.target.result instanceof ArrayBuffer) {
+          if (event.target?.result instanceof ArrayBuffer) {
             const uint8Array = new Uint8Array(event.target.result);
             await ffmpeg.FS("writeFile", inputName, uint8Array);
             await ffmpeg.run("-i", inputName, outputName);
             const data = await ffmpeg.FS("readFile", outputName);
-            const blob = new Blob([data.buffer], { type: file.file.type });
+            const blob = new Blob([new Uint8Array(data).buffer], { type: file.file.type });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
@@ -138,27 +114,13 @@ const Dropzone = () => {
             URL.revokeObjectURL(url);
           }
         };
-        reader.onerror = (error) => {
-          toast({
-            title: "File Read Error",
-            description: `Error reading ${file.name}: ${error}`,
-            variant: "destructive",
-          });
-        };
         reader.readAsArrayBuffer(file.file);
       } catch (e) {
-        toast({
-          title: "Conversion Error",
-          description: `Error converting ${file.name}: ${e}`,
-          variant: "destructive",
-        });
+        toast({ title: "Conversion Error", description: `Error converting ${file.name}: ${e}`, variant: "destructive" });
       }
     }
 
-    toast({
-      title: "Conversion Completed",
-      description: "Files have been converted and downloaded.",
-    });
+    toast({ title: "Conversion Completed", description: "Files have been converted and downloaded." });
   };
 
   return (
