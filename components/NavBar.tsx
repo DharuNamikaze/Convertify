@@ -7,10 +7,8 @@ import { Button } from "./ui/button"
 import { BsGithub } from "react-icons/bs";
 import {
     Sheet,
-    SheetClose,
     SheetContent,
     SheetDescription,
-    SheetFooter,
     SheetHeader,
     SheetTitle,
     SheetTrigger,
