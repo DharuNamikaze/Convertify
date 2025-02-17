@@ -1,7 +1,21 @@
-import type { NextConfig } from "next";
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  webpack: (config) => {
+    config.module.rules.push({
+      test: /@ffmpeg\/ffmpeg/,
+      use: {
+        loader: "babel-loader",
+        options: {
+          presets: ["@babel/preset-env"],
+        },
+      },
+    });
 
-const nextConfig: NextConfig = {
-  /* config options here */
+    return config;
+  },
+  experimental: {
+    esmExternals: false, // Ensure compatibility with CommonJS
+  },
 };
 
-export default nextConfig;
+module.exports = nextConfig;
