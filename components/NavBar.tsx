@@ -15,7 +15,7 @@ import {
 } from "../components/ui/sheet"
 import { FiMenu } from "react-icons/fi";
 
-export default function NavBar({ }): any {
+export default function NavBar()  {
     
     return (
         <nav className='w-full px-5 py-5 max-lg:justify-between justify-between flex backdrop-blur-md'>
