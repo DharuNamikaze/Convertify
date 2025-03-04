@@ -96,8 +96,9 @@ const Dropzone = () => {
 
   const handleConvertNow = async () => {
     if (!ffmpegLoaded) {
+      {<div>Loading...</div>}
       toast({
-        title: "FFmpeg not loaded",
+        title: "Loading Files",
         description: "Please wait for FFmpeg to load.",
         variant: "destructive",
       });
@@ -118,14 +119,14 @@ const Dropzone = () => {
       try {
         const inputName = file.name;
         const outputName = `${inputName.substring(0, inputName.lastIndexOf("."))}.${file.targetFormat}`;
-        
+
         const reader = new FileReader();
         reader.onload = async (event) => {
           if (event.target?.result instanceof ArrayBuffer) {
             const uint8Array = new Uint8Array(event.target.result);
-            await ffmpeg.FS("writeFile", inputName, uint8Array);
+            ffmpeg.FS("writeFile", inputName, uint8Array);
             await ffmpeg.run("-i", inputName, outputName);
-            const data = await ffmpeg.FS("readFile", outputName);
+            const data = ffmpeg.FS("readFile", outputName);
             const blob = new Blob([new Uint8Array(data).buffer], { type: file.file.type });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -138,12 +139,12 @@ const Dropzone = () => {
           }
         };
         reader.readAsArrayBuffer(file.file);
+        toast({ title: "Conversion Completed", description: "Files have been converted and downloading." });
       } catch (e) {
         toast({ title: "Conversion Error", description: `Error converting ${file.name}: ${e}`, variant: "destructive" });
       }
-    }
 
-    toast({ title: "Conversion Completed", description: "Files have been converted and downloaded." });
+    }
   };
 
   return (
@@ -162,12 +163,13 @@ const Dropzone = () => {
           {files.map((file, index) => (
             <div key={index} className="pb-4 border flex items-center max-sm:flex max-sm:flex-col max-sm:gap-5">
               <div className="p-5 flex-1">
-                <span className="flex items-center gap-1">
-                  {file.type.startsWith("image/") && <FcAddImage />}
-                  {file.type.startsWith("application/") && <FcDocument />}
-                  {file.type.startsWith("audio/") && <FcAudioFile />}
-                  {file.type.startsWith("video/") && <FcVideoFile />}
-                  {file.name}
+                <span id="FileName" className="flex items-center gap-1">
+                  {file.type.startsWith("image/") && <FcAddImage className="min-w-5 min-h-5" />}
+                  {file.type.startsWith("application/") && <FcDocument className="min-w-5 min-h-5" />}
+                  {file.type.startsWith("audio/") && <FcAudioFile className="min-w-5 min-h-5" />}
+                  {file.type.startsWith("video/") && <FcVideoFile className="min-w-5 min-h-5" />}
+                  {file.name.length > 40 ? file.name.slice(0, 10) + "....." + file.name.slice(file.name.length - 10, file.name.length) : file.name}
+                  {/* {file.name.length > 40 && window.innerWidth<640 ? file.name.slice(0, 10) + "....." + file.name.slice(file.name.length - 10, file.name.length) : file.name} */}
                   <small className="text-gray-700">({formatFileSize(file.size)})</small>
                 </span>
               </div>
@@ -177,9 +179,9 @@ const Dropzone = () => {
                     <SelectValue placeholder="Select Format" />
                   </SelectTrigger>
                   <SelectContent className="w-[300px]">
-                    <div className="grid grid-cols-2 gap-2 p-2">
+                    <div className={file.type.startsWith("audio/") || file.type.startsWith("video/")  ? '' : 'grid grid-cols-2 gap-2 p-2'}>
                       <div>
-                        <SelectGroup>
+                        {file.type.startsWith("image/") && <SelectGroup>
                           <SelectItem value="jpeg">JPEG</SelectItem>
                           <SelectItem value="png">PNG</SelectItem>
                           <SelectItem value="jpg">JPG</SelectItem>
@@ -188,9 +190,10 @@ const Dropzone = () => {
                           <SelectItem value="ico">ICO</SelectItem>
                           <SelectItem value="gif">GIF</SelectItem>
                         </SelectGroup>
+                        }
                       </div>
                       <div>
-                        <SelectGroup>
+                        {file.type.startsWith("image/") && <SelectGroup>
                           <SelectItem value="heif">HEIF</SelectItem>
                           <SelectItem value="tiff">TIFF</SelectItem>
                           <SelectItem value="psd">PSD</SelectItem>
@@ -198,8 +201,35 @@ const Dropzone = () => {
                           <SelectItem value="eps">EPS</SelectItem>
                           <SelectItem value="webp">WEBP</SelectItem>
                           <SelectItem value="bmp">BMP</SelectItem>
-                        </SelectGroup>
+                        </SelectGroup>}
                       </div>
+                      <div>
+                        {file.type.startsWith("audio/") && <SelectGroup>
+                          <SelectItem value="mp3">MP3</SelectItem>
+                          <SelectItem value="wav">WAV</SelectItem>
+                          <SelectItem value="ogg">OGG</SelectItem>
+                          <SelectItem value="flac">FLAC</SelectItem>
+                          <SelectItem value="aiff">AIFF</SelectItem>
+                          <SelectItem value="m4a">M4A</SelectItem>
+                          <SelectItem value="wma">WMA</SelectItem>
+                          <SelectItem value="aac">AAC</SelectItem>
+                        </SelectGroup>
+                        }
+                      </div>
+                      <div>
+                        {file.type.startsWith("video/") && <SelectGroup>
+                          <SelectItem value="mp4">MP4</SelectItem>
+                          <SelectItem value="avi">AVI</SelectItem>
+                          <SelectItem value="mov">MOV</SelectItem>
+                          <SelectItem value="wmv">WMV</SelectItem>
+                          <SelectItem value="mkv">MKV</SelectItem>
+                          <SelectItem value="flv">FLV</SelectItem>
+                          <SelectItem value="webm">WEBM</SelectItem>
+                          <SelectItem value="mpeg">MPEG</SelectItem>
+                        </SelectGroup>
+                        }
+                      </div>
+
                     </div>
                   </SelectContent>
                 </Select>

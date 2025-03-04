@@ -8,6 +8,7 @@ const addVariablesForColors = ({ addBase, theme }: any) => {
     Object.entries(allColors).map(([key, val]) => [`--${key}`, val])
   );
 
+  
   addBase({
     ":root": newVars,
   });
