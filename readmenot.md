@@ -14,4 +14,4 @@ Controls for FFMPEG:
 // working -- mp3, avi
 
 //multimedia - video
-// working -- mp4, avi, mov, mpeg, flv, mkv, mwv,  
+// working -- mp4, avi, mov, mpeg, flv, mkv, mwv.

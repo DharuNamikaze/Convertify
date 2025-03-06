@@ -17,7 +17,7 @@ import { FiMenu } from "react-icons/fi";
 export default function NavBar()  {
     
     return (
-        <nav className='w-full px-5 py-5 flex-grow backdrop-blur-md'>
+        <nav className='w-full px-5 py-5 max-lg:justify-between justify-between flex'>
 
             {/* Desktop navigation */}
 
@@ -58,7 +58,7 @@ export default function NavBar()  {
 
             {/* Mobile Navibar */}
             <Sheet>
-                <SheetTrigger className="block md:hidden p-2"><FiMenu className='w-5 h-5' /></SheetTrigger>
+                <SheetTrigger className="sheettrigger block md:hidden p-2"><FiMenu className='w-5 h-5' /></SheetTrigger>
                 <SheetContent>
                     <SheetHeader>
                         <SheetTitle></SheetTitle>
