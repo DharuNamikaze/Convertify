@@ -35,8 +35,18 @@ const Dropzone = () => {
 
   useEffect(() => {
     const loadFFmpeg = async () => {
-      await ffmpeg.load();
-      setFfmpegLoaded(true);
+      try {
+        await ffmpeg.load();
+        // Enable hardware acceleration
+        await ffmpeg.run('-hwaccel', 'auto');
+        setFfmpegLoaded(true);
+      } catch (error) {
+        toast({
+          title: "FFmpeg Error",
+          description: "Failed to initialize FFmpeg",
+          variant: "destructive",
+        });
+      }
     };
     loadFFmpeg();
   }, []);
@@ -96,7 +106,6 @@ const Dropzone = () => {
 
   const handleConvertNow = async () => {
     if (!ffmpegLoaded) {
-      {<div>Loading...</div>}
       toast({
         title: "Loading Files",
         description: "Please wait for FFmpeg to load.",
@@ -125,7 +134,34 @@ const Dropzone = () => {
           if (event.target?.result instanceof ArrayBuffer) {
             const uint8Array = new Uint8Array(event.target.result);
             ffmpeg.FS("writeFile", inputName, uint8Array);
-            await ffmpeg.run("-i", inputName, outputName);
+
+            // Optimize conversion based on file type
+            const fileType = file.file.type.split('/')[0];
+            if (fileType === 'video') {
+              await ffmpeg.run(
+                '-i', inputName,
+                '-c:v', 'h264',
+                '-preset', 'ultrafast',
+                '-threads', '0',
+                '-movflags', '+faststart',
+                outputName
+              );
+            } else if (fileType === 'audio') {
+              await ffmpeg.run(
+                '-i', inputName,
+                '-c:a', 'aac',
+                '-q:a', '2',
+                outputName
+              );
+            } else {
+              // For images
+              await ffmpeg.run(
+                '-i', inputName,
+                '-quality', '85',
+                outputName
+              );
+            }
+
             const data = ffmpeg.FS("readFile", outputName);
             const blob = new Blob([new Uint8Array(data).buffer], { type: file.file.type });
             const url = URL.createObjectURL(blob);
@@ -136,14 +172,24 @@ const Dropzone = () => {
             a.click();
             a.remove();
             URL.revokeObjectURL(url);
+            
+            // Clean up FFmpeg memory
+            ffmpeg.FS("unlink", inputName);
+            ffmpeg.FS("unlink", outputName);
           }
         };
         reader.readAsArrayBuffer(file.file);
-        toast({ title: "Conversion Completed", description: "Files have been converted and downloading." });
+        toast({ 
+          title: "Conversion Started", 
+          description: `Converting ${file.name}...` 
+        });
       } catch (e) {
-        toast({ title: "Conversion Error", description: `Error converting ${file.name}: ${e}`, variant: "destructive" });
+        toast({ 
+          title: "Conversion Error", 
+          description: `Error converting ${file.name}: ${e}`, 
+          variant: "destructive" 
+        });
       }
-
     }
   };
 
@@ -179,7 +225,7 @@ const Dropzone = () => {
                     <SelectValue placeholder="Select Format" />
                   </SelectTrigger>
                   <SelectContent className="w-[300px]">
-                    <div className={file.type.startsWith("audio/") || file.type.startsWith("video/")  ? '' : 'grid grid-cols-2 gap-2 p-2'}>
+                    <div className={file.type.startsWith("audio/") || file.type.startsWith("video/") ? '' : 'grid grid-cols-2 gap-2 p-2'}>
                       <div>
                         {file.type.startsWith("image/") && <SelectGroup>
                           <SelectItem value="jpeg">JPEG</SelectItem>
