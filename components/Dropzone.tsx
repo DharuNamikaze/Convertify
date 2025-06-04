@@ -127,55 +127,84 @@ const Dropzone = () => {
 
       try {
         const inputName = file.name;
-        const outputName = `${inputName.substring(0, inputName.lastIndexOf("."))}.${file.targetFormat}`;
+        const outputName = `output.${file.targetFormat}`;
 
         const reader = new FileReader();
         reader.onload = async (event) => {
           if (event.target?.result instanceof ArrayBuffer) {
-            const uint8Array = new Uint8Array(event.target.result);
-            ffmpeg.FS("writeFile", inputName, uint8Array);
+            try {
+              const uint8Array = new Uint8Array(event.target.result);
+              ffmpeg.FS("writeFile", inputName, uint8Array);
 
-            // Optimize conversion based on file type
-            const fileType = file.file.type.split('/')[0];
-            if (fileType === 'video') {
-              await ffmpeg.run(
-                '-i', inputName,
-                '-c:v', 'h264',
-                '-preset', 'ultrafast',
-                '-threads', '0',
-                '-movflags', '+faststart',
-                outputName
-              );
-            } else if (fileType === 'audio') {
-              await ffmpeg.run(
-                '-i', inputName,
-                '-c:a', 'aac',
-                '-q:a', '2',
-                outputName
-              );
-            } else {
-              // For images
-              await ffmpeg.run(
-                '-i', inputName,
-                '-quality', '85',
-                outputName
-              );
+              const fileType = file.file.type.split('/')[0];
+              
+              // Special handling for HEIF format
+              if (file.targetFormat === 'heif') {
+                await ffmpeg.run(
+                  '-i', inputName,
+                  '-vf', 'format=yuv420p',
+                  '-c:v', 'libx265',
+                  '-preset', 'medium',
+                  '-crf', '23',
+                  outputName
+                );
+              } else if (fileType === 'video') {
+                await ffmpeg.run(
+                  '-i', inputName,
+                  '-c:v', 'h264',
+                  '-preset', 'ultrafast',
+                  '-threads', '0',
+                  '-movflags', '+faststart',
+                  outputName
+                );
+              } else if (fileType === 'audio') {
+                await ffmpeg.run(
+                  '-i', inputName,
+                  '-c:a', 'aac',
+                  '-q:a', '2',
+                  outputName
+                );
+              } else {
+                // For images
+                await ffmpeg.run(
+                  '-i', inputName,
+                  '-quality', '85',
+                  outputName
+                );
+              }
+
+              // Verify if the output file exists
+              const files = ffmpeg.FS('readdir', '/');
+              if (!files.includes(outputName)) {
+                throw new Error('Conversion failed: Output file not created');
+              }
+
+              const data = ffmpeg.FS("readFile", outputName);
+              const blob = new Blob([new Uint8Array(data).buffer], { type: `${fileType}/${file.targetFormat}` });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `${inputName.substring(0, inputName.lastIndexOf("."))}.${file.targetFormat}`;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              URL.revokeObjectURL(url);
+
+              // Clean up FFmpeg memory
+              ffmpeg.FS("unlink", inputName);
+              ffmpeg.FS("unlink", outputName);
+
+              toast({
+                title: "Success",
+                description: `Converted ${file.name} successfully!`
+              });
+            } catch (error) {
+              toast({
+                title: "Conversion Error",
+                description: `Failed to convert ${file.name}: ${error}`,
+                variant: "destructive"
+              });
             }
-
-            const data = ffmpeg.FS("readFile", outputName);
-            const blob = new Blob([new Uint8Array(data).buffer], { type: file.file.type });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = outputName;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            URL.revokeObjectURL(url);
-            
-            // Clean up FFmpeg memory
-            ffmpeg.FS("unlink", inputName);
-            ffmpeg.FS("unlink", outputName);
           }
         };
         reader.readAsArrayBuffer(file.file);
