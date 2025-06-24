@@ -40,7 +40,8 @@ const Dropzone = () => {
         // Enable hardware acceleration
         await ffmpeg.run('-hwaccel', 'auto');
         setFfmpegLoaded(true);
-      } catch (error) {
+      } catch (error:unknown) {
+        console.log(error, "Error from hardware acceleration")
         toast({
           title: "FFmpeg Error",
           description: "Failed to initialize FFmpeg",
@@ -137,7 +138,7 @@ const Dropzone = () => {
               ffmpeg.FS("writeFile", inputName, uint8Array);
 
               const fileType = file.file.type.split('/')[0];
-              
+
               // Special handling for HEIF format
               if (file.targetFormat === 'heif') {
                 await ffmpeg.run(
@@ -208,15 +209,15 @@ const Dropzone = () => {
           }
         };
         reader.readAsArrayBuffer(file.file);
-        toast({ 
-          title: "Conversion Started", 
-          description: `Converting ${file.name}...` 
+        toast({
+          title: "Conversion Started",
+          description: `Converting ${file.name}...`
         });
       } catch (e) {
-        toast({ 
-          title: "Conversion Error", 
-          description: `Error converting ${file.name}: ${e}`, 
-          variant: "destructive" 
+        toast({
+          title: "Conversion Error",
+          description: `Error converting ${file.name}: ${e}`,
+          variant: "destructive"
         });
       }
     }
