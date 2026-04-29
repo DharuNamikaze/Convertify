@@ -4,6 +4,9 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { Button } from "./ui/button"
 import { BsGithub } from "react-icons/bs";
+import { MdDarkMode, MdLightMode } from "react-icons/md";
+import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
 import {
     Sheet,
     SheetContent,
@@ -15,6 +18,20 @@ import {
 import { FiMenu } from "react-icons/fi";
 
 export default function NavBar()  {
+    const { theme, setTheme } = useTheme();
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    if (!mounted) {
+        return null;
+    }
+
+    const toggleTheme = () => {
+        setTheme(theme === 'dark' ? 'light' : 'dark');
+    };
     
     return (
         <nav className='w-full px-5 py-5 max-lg:justify-between justify-between flex'>
@@ -44,6 +61,13 @@ export default function NavBar()  {
                         Who
                     </Button>
                 </Link>
+                <Button 
+                    variant='ghost' 
+                    className='text-md'
+                    onClick={toggleTheme}
+                >
+                    {theme === 'dark' ? <MdLightMode className="w-5 h-5" /> : <MdDarkMode className="w-5 h-5" />}
+                </Button>
                 </div>
             <Link href="https://github.com/DharuNamikaze/Convertify" className='max-md:hidden'>
                 <Button
@@ -76,6 +100,21 @@ export default function NavBar()  {
                                     <Link href='https://github.com/DharuNamikaze'>
                                         Who
                                     </Link>
+                                </Button>
+                                <Button 
+                                    variant='ghost' 
+                                    className='text-md hover:bg-black hover:text-white'
+                                    onClick={toggleTheme}
+                                >
+                                    {theme === 'dark' ? (
+                                        <span className="flex items-center gap-2">
+                                            <MdLightMode className="w-5 h-5" /> Light Mode
+                                        </span>
+                                    ) : (
+                                        <span className="flex items-center gap-2">
+                                            <MdDarkMode className="w-5 h-5" /> Dark Mode
+                                        </span>
+                                    )}
                                 </Button>
                                 <Button
                                         variant="default"
