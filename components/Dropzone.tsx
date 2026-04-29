@@ -51,7 +51,11 @@ type ConvertFile = {
 };
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
-const CDN_BASE = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
+// Self-hosted in /public — same-origin so COEP/CORP is never an issue
+const CORE_BASE = "/";
+
+// Singleton loading promise — prevents double-init from React StrictMode
+let ffmpegLoadPromise: Promise<FFmpegInstance> | null = null;
 
 // Map raw error patterns to friendly messages
 function friendlyError(err: unknown): string {
@@ -81,13 +85,22 @@ const Dropzone = () => {
 
   const loadFFmpeg = async (): Promise<FFmpegInstance> => {
     if (ffmpegRef.current?.loaded) return ffmpegRef.current;
-    const { FFmpeg } = window.FFmpegWASM;
-    const ffmpeg = new FFmpeg();
+
+    // Reuse in-flight load if already started (StrictMode double-invoke guard)
+    if (!ffmpegLoadPromise) {
+      ffmpegLoadPromise = (async () => {
+        const { FFmpeg } = window.FFmpegWASM;
+        const ffmpeg = new FFmpeg();
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${CORE_BASE}ffmpeg-core.js`, "text/javascript"),
+          wasmURL: await toBlobURL(`${CORE_BASE}ffmpeg-core.wasm`, "application/wasm"),
+        });
+        return ffmpeg;
+      })();
+    }
+
+    const ffmpeg = await ffmpegLoadPromise;
     ffmpegRef.current = ffmpeg;
-    await ffmpeg.load({
-      coreURL: await toBlobURL(`${CDN_BASE}/ffmpeg-core.js`, "text/javascript"),
-      wasmURL: await toBlobURL(`${CDN_BASE}/ffmpeg-core.wasm`, "application/wasm"),
-    });
     return ffmpeg;
   };
 
@@ -293,46 +306,46 @@ const Dropzone = () => {
       <div
         {...getRootProps({
           className:
-            "lg:mx-52 mx-10 py-28 border dropzone flex flex-col items-center justify-center cursor-pointer hover:border-violet-500 transition-colors",
+            "lg:mx-52 mx-4 sm:mx-10 py-14 sm:py-20 lg:py-28 border dropzone flex flex-col items-center justify-center cursor-pointer hover:border-violet-500 transition-colors",
         })}
       >
         <FiUploadCloud className="w-10 h-10 mb-2" />
         <input {...getInputProps()} />
-        <p>
+        <p className="text-sm sm:text-base text-center px-4">
           Drag & drop your files here, or click to{" "}
           <span className="text-violet-800 cursor-pointer">select</span> files
         </p>
-        <p className="text-sm text-gray-500 mt-1">Images, Audio, Video — up to 500MB each</p>
+        <p className="text-xs sm:text-sm text-gray-500 mt-1">Images, Audio, Video — up to 500MB each</p>
       </div>
 
       {files.length > 0 && (
-        <div className="mt-5 lg:mx-52 max-sm:m-10 sm:mx-10 py-10">
+        <div className="mt-5 lg:mx-52 mx-4 sm:mx-10 py-6 sm:py-10">
           {files.map((file, index) => (
             <div key={index} className="pb-4 border flex flex-col">
-              <div className="flex items-center max-sm:flex-col max-sm:gap-5">
-                <div className="p-5 flex-1 min-w-0">
-                  <span className="flex items-center gap-2">
-                    {file.type.startsWith("image/") && <FcAddImage className="min-w-5 min-h-5 shrink-0" />}
-                    {file.type.startsWith("application/") && <FcDocument className="min-w-5 min-h-5 shrink-0" />}
-                    {file.type.startsWith("audio/") && <FcAudioFile className="min-w-5 min-h-5 shrink-0" />}
-                    {file.type.startsWith("video/") && <FcVideoFile className="min-w-5 min-h-5 shrink-0" />}
-                    <span className="truncate">
-                      {file.name.length > 40
-                        ? file.name.slice(0, 10) + "....." + file.name.slice(-10)
-                        : file.name}
+              <div className="flex items-center flex-wrap gap-y-2 sm:flex-nowrap">
+                {/* File icon + name + size */}
+                <div className="p-3 sm:p-5 flex-1 min-w-0 overflow-hidden">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {file.type.startsWith("image/") && <FcAddImage className="w-5 h-5 shrink-0" />}
+                    {file.type.startsWith("application/") && <FcDocument className="w-5 h-5 shrink-0" />}
+                    {file.type.startsWith("audio/") && <FcAudioFile className="w-5 h-5 shrink-0" />}
+                    {file.type.startsWith("video/") && <FcVideoFile className="w-5 h-5 shrink-0" />}
+                    <span className="truncate text-sm sm:text-base min-w-0 flex-1">
+                      {file.name}
                     </span>
-                    <small className="text-gray-500 whitespace-nowrap shrink-0">
+                    <small className="text-gray-500 whitespace-nowrap shrink-0 text-xs">
                       ({formatFileSize(file.size)})
                     </small>
-                  </span>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-3 p-2 shrink-0">
+                {/* Format select + delete */}
+                <div className="flex items-center gap-2 sm:gap-3 px-3 sm:p-2 pb-3 sm:pb-0 w-full sm:w-auto shrink-0">
                   <Select
                     onValueChange={(value) => handleFormatChange(index, value)}
                     disabled={file.status === "converting" || isConverting}
                   >
-                    <SelectTrigger className="w-[180px]">
+                    <SelectTrigger className="w-full sm:w-[160px]">
                       <SelectValue placeholder="Select Format" />
                     </SelectTrigger>
                     <SelectContent>
@@ -389,7 +402,7 @@ const Dropzone = () => {
                     variant="outline"
                     onClick={() => handleDelete(index)}
                     disabled={file.status === "converting" || isConverting}
-                    className="px-2.5 rounded-full bg-violet-900 hover:bg-violet-700 text-white disabled:opacity-50"
+                    className="px-2.5 rounded-full bg-violet-900 hover:bg-violet-700 text-white disabled:opacity-50 shrink-0"
                   >
                     <MdDelete />
                   </Button>
@@ -422,16 +435,16 @@ const Dropzone = () => {
             </div>
           ))}
 
-          <div className="flex items-center gap-4 mt-6 px-2">
+          <div className="flex items-center gap-4 mt-6 px-3 sm:px-2">
             <Button
               onClick={handleConvertNow}
               disabled={isConverting || isLoading}
-              className="bg-violet-900 hover:bg-violet-700"
+              className="bg-violet-900 hover:bg-violet-700 w-full sm:w-auto"
             >
               {buttonLabel()}
             </Button>
             {files.length > 1 && (
-              <Button variant="destructive" onClick={handleDeleteAll} disabled={isConverting || isLoading}>
+              <Button variant="destructive" onClick={handleDeleteAll} disabled={isConverting || isLoading} className="w-full sm:w-auto">
                 Delete All
               </Button>
             )}

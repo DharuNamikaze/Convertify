@@ -29,8 +29,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning className={poppins.variable}>
       <head>
         <link rel="icon" type="image/x-icon" href="/logo.svg" />
-        {/* Load only @ffmpeg/ffmpeg UMD — util is broken as a browser script, we implement toBlobURL inline */}
-        <Script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js" strategy="beforeInteractive" crossOrigin="anonymous" />
+        {/* FFmpeg self-hosted in /public for same-origin worker loading */}
+        <Script src="/ffmpeg.js" strategy="beforeInteractive" />
       </head>
       <body className={poppins.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
