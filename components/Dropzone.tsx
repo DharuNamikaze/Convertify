@@ -1,8 +1,6 @@
 "use client";
 import { useDropzone } from "react-dropzone";
 import { useState, useRef, useCallback } from "react";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { toBlobURL } from "@ffmpeg/util";
 import { Button } from "../components/ui/button";
 import { useToast } from "../hooks/use-toast";
 import { Toaster } from "../components/ui/toaster";
@@ -18,6 +16,34 @@ import {
   SelectValue,
 } from "../components/ui/select";
 
+// FFmpeg is loaded via CDN script tag in layout.tsx (UMD bundle → window.FFmpegWASM)
+// @ffmpeg/util's UMD is broken in browsers, so we implement toBlobURL inline
+declare global {
+  interface Window {
+    FFmpegWASM: { FFmpeg: new () => FFmpegInstance };
+  }
+}
+
+// Fetch a URL and return a blob: URL — replaces @ffmpeg/util toBlobURL
+async function toBlobURL(url: string, mimeType: string): Promise<string> {
+  const resp = await fetch(url);
+  const buf = await resp.arrayBuffer();
+  const blob = new Blob([buf], { type: mimeType });
+  return URL.createObjectURL(blob);
+}
+
+interface FFmpegInstance {
+  loaded: boolean;
+  load: (opts: { coreURL: string; wasmURL: string }) => Promise<void>;
+  on: (event: string, cb: (data: { progress?: number; message?: string }) => void) => void;
+  off: (event: string, cb: (data: { progress?: number; message?: string }) => void) => void;
+  exec: (args: string[]) => Promise<void>;
+  writeFile: (name: string, data: Uint8Array) => Promise<void>;
+  readFile: (name: string) => Promise<Uint8Array>;
+  deleteFile: (name: string) => Promise<void>;
+  terminate: () => void;
+}
+
 type ConvertFile = {
   file: File;
   name: string;
@@ -29,27 +55,26 @@ type ConvertFile = {
 };
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
+const CDN_BASE = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
 
 const Dropzone = () => {
   const { toast } = useToast();
   const [files, setFiles] = useState<ConvertFile[]>([]);
   const [isConverting, setIsConverting] = useState(false);
-  const ffmpegRef = useRef<FFmpeg | null>(null);
-  const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
+  const ffmpegRef = useRef<FFmpegInstance | null>(null);
 
-  const loadFFmpeg = async () => {
-    if (ffmpegLoaded && ffmpegRef.current) return ffmpegRef.current;
+  const loadFFmpeg = async (): Promise<FFmpegInstance> => {
+    if (ffmpegRef.current?.loaded) return ffmpegRef.current;
 
+    const { FFmpeg } = window.FFmpegWASM;
     const ffmpeg = new FFmpeg();
     ffmpegRef.current = ffmpeg;
 
-    const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
     await ffmpeg.load({
-      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+      coreURL: await toBlobURL(`${CDN_BASE}/ffmpeg-core.js`, "text/javascript"),
+      wasmURL: await toBlobURL(`${CDN_BASE}/ffmpeg-core.wasm`, "application/wasm"),
     });
 
-    setFfmpegLoaded(true);
     return ffmpeg;
   };
 
@@ -124,7 +149,7 @@ const Dropzone = () => {
   );
 
   const downloadFile = (data: Uint8Array, filename: string, mimeType: string) => {
-    const blob = new Blob([data instanceof Uint8Array ? data.buffer as ArrayBuffer : data], { type: mimeType });
+    const blob = new Blob([data.buffer as ArrayBuffer], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -150,7 +175,6 @@ const Dropzone = () => {
     if (fileType === "audio") {
       return ["-i", inputName, "-c:a", "aac", "-b:a", "128k", outputName];
     }
-    // Images
     if (targetFormat === "jpg" || targetFormat === "jpeg") {
       return ["-i", inputName, "-q:v", "2", outputName];
     }
@@ -176,8 +200,8 @@ const Dropzone = () => {
   };
 
   const handleConvertNow = async () => {
-    const pending = files.filter((f) => f.targetFormat && f.status !== "completed");
-    if (pending.length === 0) {
+    const hasPending = files.some((f) => f.targetFormat && f.status !== "completed");
+    if (!hasPending) {
       toast({
         title: "Nothing to convert",
         description: "Please select a target format for at least one file.",
@@ -188,14 +212,15 @@ const Dropzone = () => {
 
     setIsConverting(true);
 
-    let ffmpeg: FFmpeg;
+    let ffmpeg: FFmpegInstance;
     try {
-      toast({ title: "Loading FFmpeg…", description: "This may take a moment on first use." });
+      toast({ title: "Loading FFmpeg…", description: "Downloading conversion engine, please wait." });
       ffmpeg = await loadFFmpeg();
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       toast({
         title: "FFmpeg failed to load",
-        description: "Could not load the conversion engine. Check your internet connection.",
+        description: `Could not load the conversion engine: ${msg}`,
         variant: "destructive",
       });
       setIsConverting(false);
@@ -206,17 +231,19 @@ const Dropzone = () => {
       const file = files[i];
       if (!file.targetFormat || file.status === "completed") continue;
 
+      const progressHandler = ({ progress }: { progress?: number }) => {
+        if (progress !== undefined) {
+          updateFile(i, Math.min(Math.round(progress * 100), 99), "converting");
+        }
+      };
+
       try {
         updateFile(i, 0, "converting");
+        ffmpeg.on("progress", progressHandler);
 
         const inputName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-        const outputName = `output_${i}.${file.targetFormat}`;
+        const outputName = `out_${i}.${file.targetFormat}`;
         const fileType = file.file.type.split("/")[0];
-
-        // Track progress for this file
-        ffmpeg.on("progress", ({ progress }) => {
-          updateFile(i, Math.min(Math.round(progress * 100), 99), "converting");
-        });
 
         const fileBuffer = await file.file.arrayBuffer();
         await ffmpeg.writeFile(inputName, new Uint8Array(fileBuffer));
@@ -224,17 +251,19 @@ const Dropzone = () => {
         const args = getFFmpegArgs(inputName, outputName, fileType, file.targetFormat);
         await ffmpeg.exec(args);
 
-        const data = await ffmpeg.readFile(outputName) as Uint8Array;
+        const data = await ffmpeg.readFile(outputName);
         await ffmpeg.deleteFile(inputName);
         await ffmpeg.deleteFile(outputName);
 
+        ffmpeg.off("progress", progressHandler);
+
         const baseName = file.name.substring(0, file.name.lastIndexOf(".")) || file.name;
-        const mimeType = `${fileType}/${file.targetFormat}`;
-        downloadFile(data, `${baseName}.${file.targetFormat}`, mimeType);
+        downloadFile(data, `${baseName}.${file.targetFormat}`, `${fileType}/${file.targetFormat}`);
 
         updateFile(i, 100, "completed");
         toast({ title: "Done!", description: `${file.name} converted successfully.` });
       } catch (err) {
+        ffmpeg.off("progress", progressHandler);
         updateFile(i, 0, "error");
         const msg = err instanceof Error ? err.message : "Unknown error";
         toast({
@@ -266,31 +295,33 @@ const Dropzone = () => {
       </div>
 
       {files.length > 0 && (
-        <div className="mt-5 lg:mx-52 max-sm:m-10 sm:mx-10 items-center justify-center py-10 uploaded-files">
+        <div className="mt-5 lg:mx-52 max-sm:m-10 sm:mx-10 py-10">
           {files.map((file, index) => (
-            <div key={index} className="pb-4 border flex flex-col max-sm:gap-5">
-              <div className="flex items-center max-sm:flex max-sm:flex-col max-sm:gap-5">
-                <div className="p-5 flex-1">
-                  <span id="FileName" className="flex items-center gap-1">
-                    {file.type.startsWith("image/") && <FcAddImage className="min-w-5 min-h-5" />}
-                    {file.type.startsWith("application/") && <FcDocument className="min-w-5 min-h-5" />}
-                    {file.type.startsWith("audio/") && <FcAudioFile className="min-w-5 min-h-5" />}
-                    {file.type.startsWith("video/") && <FcVideoFile className="min-w-5 min-h-5" />}
-                    <span className="truncate max-w-xs">
+            <div key={index} className="pb-4 border flex flex-col">
+              <div className="flex items-center max-sm:flex-col max-sm:gap-5">
+                <div className="p-5 flex-1 min-w-0">
+                  <span className="flex items-center gap-2">
+                    {file.type.startsWith("image/") && <FcAddImage className="min-w-5 min-h-5 shrink-0" />}
+                    {file.type.startsWith("application/") && <FcDocument className="min-w-5 min-h-5 shrink-0" />}
+                    {file.type.startsWith("audio/") && <FcAudioFile className="min-w-5 min-h-5 shrink-0" />}
+                    {file.type.startsWith("video/") && <FcVideoFile className="min-w-5 min-h-5 shrink-0" />}
+                    <span className="truncate">
                       {file.name.length > 40
                         ? file.name.slice(0, 10) + "....." + file.name.slice(-10)
                         : file.name}
                     </span>
-                    <small className="text-gray-500 whitespace-nowrap">({formatFileSize(file.size)})</small>
+                    <small className="text-gray-500 whitespace-nowrap shrink-0">
+                      ({formatFileSize(file.size)})
+                    </small>
                   </span>
                 </div>
 
-                <div className="flex items-center gap-5 p-2">
+                <div className="flex items-center gap-3 p-2 shrink-0">
                   <Select
                     onValueChange={(value) => handleFormatChange(index, value)}
                     disabled={file.status === "converting" || isConverting}
                   >
-                    <SelectTrigger className="w-[200px]">
+                    <SelectTrigger className="w-[180px]">
                       <SelectValue placeholder="Select Format" />
                     </SelectTrigger>
                     <SelectContent>
@@ -347,14 +378,13 @@ const Dropzone = () => {
                     variant="outline"
                     onClick={() => handleDelete(index)}
                     disabled={file.status === "converting" || isConverting}
-                    className="px-2.5 rounded-full bg-violet-900 hover:text-white text-white hover:bg-violet-700 disabled:opacity-50"
+                    className="px-2.5 rounded-full bg-violet-900 hover:bg-violet-700 text-white disabled:opacity-50"
                   >
                     <MdDelete />
                   </Button>
                 </div>
               </div>
 
-              {/* Progress */}
               {file.status === "converting" && (
                 <div className="px-5 pb-3">
                   <div className="w-full bg-gray-200 rounded-full h-2.5">
@@ -368,7 +398,7 @@ const Dropzone = () => {
               )}
               {file.status === "completed" && (
                 <div className="px-5 pb-3">
-                  <small className="text-green-600">✓ Conversion complete — file downloaded</small>
+                  <small className="text-green-600">✓ Converted — file downloaded</small>
                 </div>
               )}
               {file.status === "error" && (
@@ -381,14 +411,12 @@ const Dropzone = () => {
 
           <div className="flex items-center gap-4 mt-6 px-2">
             <Button
-              variant="default"
               onClick={handleConvertNow}
               disabled={isConverting}
               className="bg-violet-900 hover:bg-violet-700"
             >
               {isConverting ? "Converting…" : "Convert Now"}
             </Button>
-
             {files.length > 1 && (
               <Button variant="destructive" onClick={handleDeleteAll} disabled={isConverting}>
                 Delete All

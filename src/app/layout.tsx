@@ -3,6 +3,7 @@ import { Poppins } from "next/font/google";
 import NavBar from "../../components/NavBar";
 import { Toaster } from "../../components/ui/toaster";
 import { ThemeProvider } from "next-themes";
+import Script from "next/script";
 import "./globals.css";
 import React from "react";
 
@@ -28,6 +29,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning className={poppins.variable}>
       <head>
         <link rel="icon" type="image/x-icon" href="/logo.svg" />
+        {/* Load only @ffmpeg/ffmpeg UMD — util is broken as a browser script, we implement toBlobURL inline */}
+        <Script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js" strategy="beforeInteractive" crossOrigin="anonymous" />
       </head>
       <body className={poppins.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>

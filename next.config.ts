@@ -4,20 +4,23 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // Apply these headers to all routes
         source: "/(.*)",
         headers: [
-          {
-            key: "Cross-Origin-Opener-Policy",
-            value: "same-origin",
-          },
-          {
-            key: "Cross-Origin-Embedder-Policy",
-            value: "require-corp",
-          },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
         ],
       },
     ];
+  },
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // Don't bundle ffmpeg packages — loaded via CDN at runtime
+      config.externals = [
+        ...(Array.isArray(config.externals) ? config.externals : []),
+        { "@ffmpeg/ffmpeg": "FFmpegWASM" },
+      ];
+    }
+    return config;
   },
 };
 
