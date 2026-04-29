@@ -16,20 +16,16 @@ import {
   SelectValue,
 } from "../components/ui/select";
 
-// FFmpeg is loaded via CDN script tag in layout.tsx (UMD bundle → window.FFmpegWASM)
-// @ffmpeg/util's UMD is broken in browsers, so we implement toBlobURL inline
 declare global {
   interface Window {
     FFmpegWASM: { FFmpeg: new () => FFmpegInstance };
   }
 }
 
-// Fetch a URL and return a blob: URL — replaces @ffmpeg/util toBlobURL
 async function toBlobURL(url: string, mimeType: string): Promise<string> {
   const resp = await fetch(url);
   const buf = await resp.arrayBuffer();
-  const blob = new Blob([buf], { type: mimeType });
-  return URL.createObjectURL(blob);
+  return URL.createObjectURL(new Blob([buf], { type: mimeType }));
 }
 
 interface FFmpegInstance {
@@ -57,24 +53,41 @@ type ConvertFile = {
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const CDN_BASE = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
 
+// Map raw error patterns to friendly messages
+function friendlyError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const r = raw.toLowerCase();
+
+  if (r.includes("networkerror") || r.includes("failed to fetch") || r.includes("load"))
+    return "Couldn't reach the conversion engine. Check your internet connection and try again.";
+  if (r.includes("out of memory") || r.includes("oom"))
+    return "Your file is too large to process in the browser. Try a smaller file.";
+  if (r.includes("invalid data") || r.includes("moov atom") || r.includes("no such file"))
+    return "This file appears to be corrupted or unsupported. Try a different file.";
+  if (r.includes("encoder") || r.includes("codec") || r.includes("not supported"))
+    return "This format conversion isn't supported. Try a different output format.";
+  if (r.includes("permission") || r.includes("abort"))
+    return "The conversion was interrupted. Please try again.";
+
+  return "Something went wrong during conversion. Please try again.";
+}
+
 const Dropzone = () => {
   const { toast } = useToast();
   const [files, setFiles] = useState<ConvertFile[]>([]);
   const [isConverting, setIsConverting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const ffmpegRef = useRef<FFmpegInstance | null>(null);
 
   const loadFFmpeg = async (): Promise<FFmpegInstance> => {
     if (ffmpegRef.current?.loaded) return ffmpegRef.current;
-
     const { FFmpeg } = window.FFmpegWASM;
     const ffmpeg = new FFmpeg();
     ffmpegRef.current = ffmpeg;
-
     await ffmpeg.load({
       coreURL: await toBlobURL(`${CDN_BASE}/ffmpeg-core.js`, "text/javascript"),
       wasmURL: await toBlobURL(`${CDN_BASE}/ffmpeg-core.wasm`, "application/wasm"),
     });
-
     return ffmpeg;
   };
 
@@ -102,14 +115,19 @@ const Dropzone = () => {
     onDropRejected: (fileRejections) => {
       fileRejections.forEach(({ file, errors }) => {
         errors.forEach((error) => {
-          toast({
-            title: error.code === "file-too-large" ? "File Too Large" : "Invalid File",
-            description:
-              error.code === "file-too-large"
-                ? `${file.name} exceeds the 500MB limit.`
-                : `"${file.name}" is not a supported format.`,
-            variant: "destructive",
-          });
+          if (error.code === "file-too-large") {
+            toast({
+              title: "File too large",
+              description: `${file.name} is over 500MB. Please use a smaller file.`,
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Unsupported file",
+              description: `${file.name} can't be converted. Supported types: images, audio, and video.`,
+              variant: "destructive",
+            });
+          }
         });
       });
     },
@@ -166,36 +184,26 @@ const Dropzone = () => {
     fileType: string,
     targetFormat: string
   ): string[] => {
-    if (targetFormat === "heif") {
+    if (targetFormat === "heif")
       return ["-i", inputName, "-vf", "format=yuv420p", "-c:v", "libx265", "-preset", "medium", "-crf", "23", outputName];
-    }
-    if (fileType === "video") {
+    if (fileType === "video")
       return ["-i", inputName, "-c:v", "libx264", "-preset", "ultrafast", "-movflags", "+faststart", outputName];
-    }
-    if (fileType === "audio") {
+    if (fileType === "audio")
       return ["-i", inputName, "-c:a", "aac", "-b:a", "128k", outputName];
-    }
-    if (targetFormat === "jpg" || targetFormat === "jpeg") {
+    if (targetFormat === "jpg" || targetFormat === "jpeg")
       return ["-i", inputName, "-q:v", "2", outputName];
-    }
-    if (targetFormat === "png") {
+    if (targetFormat === "png")
       return ["-i", inputName, "-compression_level", "6", outputName];
-    }
-    if (targetFormat === "webp") {
+    if (targetFormat === "webp")
       return ["-i", inputName, "-quality", "80", outputName];
-    }
-    if (targetFormat === "gif") {
+    if (targetFormat === "gif")
       return ["-i", inputName, "-vf", "fps=10,scale=320:-1:flags=lanczos", outputName];
-    }
-    if (targetFormat === "bmp") {
+    if (targetFormat === "bmp")
       return ["-i", inputName, "-pix_fmt", "rgb24", outputName];
-    }
-    if (targetFormat === "tiff") {
+    if (targetFormat === "tiff")
       return ["-i", inputName, "-compression_algo", "lzw", outputName];
-    }
-    if (targetFormat === "ico") {
+    if (targetFormat === "ico")
       return ["-i", inputName, "-vf", "scale=256:256", outputName];
-    }
     return ["-i", inputName, outputName];
   };
 
@@ -203,38 +211,39 @@ const Dropzone = () => {
     const hasPending = files.some((f) => f.targetFormat && f.status !== "completed");
     if (!hasPending) {
       toast({
-        title: "Nothing to convert",
-        description: "Please select a target format for at least one file.",
+        title: "Select a format first",
+        description: "Pick an output format for at least one file before converting.",
         variant: "destructive",
       });
       return;
     }
 
     setIsConverting(true);
+    setIsLoading(true);
 
     let ffmpeg: FFmpegInstance;
     try {
-      toast({ title: "Loading FFmpeg…", description: "Downloading conversion engine, please wait." });
       ffmpeg = await loadFFmpeg();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+    } catch {
       toast({
-        title: "FFmpeg failed to load",
-        description: `Could not load the conversion engine: ${msg}`,
+        title: "Couldn't start conversion",
+        description: "Couldn't reach the conversion engine. Check your internet connection and try again.",
         variant: "destructive",
       });
       setIsConverting(false);
+      setIsLoading(false);
       return;
     }
+
+    setIsLoading(false);
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       if (!file.targetFormat || file.status === "completed") continue;
 
       const progressHandler = ({ progress }: { progress?: number }) => {
-        if (progress !== undefined) {
+        if (progress !== undefined)
           updateFile(i, Math.min(Math.round(progress * 100), 99), "converting");
-        }
       };
 
       try {
@@ -247,34 +256,36 @@ const Dropzone = () => {
 
         const fileBuffer = await file.file.arrayBuffer();
         await ffmpeg.writeFile(inputName, new Uint8Array(fileBuffer));
-
-        const args = getFFmpegArgs(inputName, outputName, fileType, file.targetFormat);
-        await ffmpeg.exec(args);
+        await ffmpeg.exec(getFFmpegArgs(inputName, outputName, fileType, file.targetFormat));
 
         const data = await ffmpeg.readFile(outputName);
         await ffmpeg.deleteFile(inputName);
         await ffmpeg.deleteFile(outputName);
-
         ffmpeg.off("progress", progressHandler);
 
         const baseName = file.name.substring(0, file.name.lastIndexOf(".")) || file.name;
         downloadFile(data, `${baseName}.${file.targetFormat}`, `${fileType}/${file.targetFormat}`);
 
         updateFile(i, 100, "completed");
-        toast({ title: "Done!", description: `${file.name} converted successfully.` });
+        toast({ title: "Conversion complete", description: `${file.name} is ready — check your downloads.` });
       } catch (err) {
         ffmpeg.off("progress", progressHandler);
         updateFile(i, 0, "error");
-        const msg = err instanceof Error ? err.message : "Unknown error";
         toast({
           title: "Conversion failed",
-          description: `${file.name}: ${msg}`,
+          description: friendlyError(err),
           variant: "destructive",
         });
       }
     }
 
     setIsConverting(false);
+  };
+
+  const buttonLabel = () => {
+    if (isLoading) return "Preparing…";
+    if (isConverting) return "Converting…";
+    return "Convert Now";
   };
 
   return (
@@ -393,17 +404,19 @@ const Dropzone = () => {
                       style={{ width: `${file.progress}%` }}
                     />
                   </div>
-                  <small className="text-gray-500 mt-1 block">Converting… {file.progress}%</small>
+                  <small className="text-gray-500 mt-1 block">
+                    {file.progress < 5 ? "Starting up…" : `Converting… ${file.progress}%`}
+                  </small>
                 </div>
               )}
               {file.status === "completed" && (
                 <div className="px-5 pb-3">
-                  <small className="text-green-600">✓ Converted — file downloaded</small>
+                  <small className="text-green-600">✓ Done — check your downloads</small>
                 </div>
               )}
               {file.status === "error" && (
                 <div className="px-5 pb-3">
-                  <small className="text-red-600">✗ Conversion failed</small>
+                  <small className="text-red-600">✗ Conversion failed — try a different format</small>
                 </div>
               )}
             </div>
@@ -412,13 +425,13 @@ const Dropzone = () => {
           <div className="flex items-center gap-4 mt-6 px-2">
             <Button
               onClick={handleConvertNow}
-              disabled={isConverting}
+              disabled={isConverting || isLoading}
               className="bg-violet-900 hover:bg-violet-700"
             >
-              {isConverting ? "Converting…" : "Convert Now"}
+              {buttonLabel()}
             </Button>
             {files.length > 1 && (
-              <Button variant="destructive" onClick={handleDeleteAll} disabled={isConverting}>
+              <Button variant="destructive" onClick={handleDeleteAll} disabled={isConverting || isLoading}>
                 Delete All
               </Button>
             )}
